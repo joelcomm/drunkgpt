@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DrunkGPT</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
+</head>
+<body data-stage="sober">
+  <canvas id="scene" role="img" aria-label="A 3D bar. Your drinking buddy sits across the table from you."></canvas>
+  <div id="announce" class="sr-only" aria-live="polite"></div>
+
+  <section id="setup" class="modal side">
+    <div class="card">
+      <h1>Drunk<span>GPT</span></h1>
+      <p class="tagline">Pull up a chair at The Tipsy Token. Buy your new friend a drink, or ten.</p>
+
+      <label class="field">Your buddy's name
+        <input id="buddy-name" maxlength="20" placeholder="Sam">
+      </label>
+      <label class="field">Your name <small>(optional)</small>
+        <input id="user-name" maxlength="20" placeholder="So they can slur it later">
+      </label>
+
+      <div class="field">Gender
+        <div class="seg" id="gender">
+          <button data-value="man" class="on" aria-pressed="true">Man</button>
+          <button data-value="woman">Woman</button>
+        </div>
+      </div>
+
+      <label class="field">Weight <output id="weight-out">170 lb</output>
+        <input type="range" id="weight" min="90" max="350" step="5" value="170">
+      </label>
+
+      <div class="row">
+        <button id="setup-mute" class="ghost icon" aria-label="Mute sound" aria-pressed="false">🔊</button>
+        <button id="shuffle" class="ghost">🎲 New look</button>
+        <button id="start" class="primary">Pull up a chair</button>
+      </div>
+      <p class="fine">Just a game: the BAC model is an estimate, not medical advice. If you drink for real, drink responsibly.</p>
+    </div>
+  </section>
+
+  <header id="hud" hidden>
+    <div class="bac">
+      <div class="bac-num"><span id="bac">0.000</span><small>% BAC</small></div>
+      <div class="meter"><div id="bac-ghost"></div><div id="bac-fill"></div><i style="left:26.7%"></i><i style="left:50%"></i><i style="left:73.3%"></i></div>
+      <div class="chips">
+        <span id="stage" class="chip">Sober</span>
+        <span id="trend" class="chip ghost" hidden>↑ rising</span>
+      </div>
+    </div>
+    <dl class="stats">
+      <div><dt>Time</dt><dd id="clock">9:00 PM</dd></div>
+      <div><dt>Drinks</dt><dd id="std-drinks">0</dd></div>
+      <div><dt>Vibe</dt><dd id="mood">-</dd></div>
+    </dl>
+    <div class="hud-buttons">
+      <button id="mute" class="ghost icon" aria-label="Mute sound" aria-pressed="false">🔊</button>
+      <button id="restart" class="ghost icon" aria-label="Start a new night" title="New night">↺</button>
+    </div>
+  </header>
+
+  <div id="subtitle" aria-hidden="true"></div>
+
+  <aside id="bar-panel" hidden>
+    <div class="panel-head">
+      <h2>Bartender</h2>
+      <button id="bar-toggle" class="ghost small" aria-expanded="true">Hide</button>
+    </div>
+    <div class="panel-body">
+      <div id="menu" class="menu"></div>
+      <div class="controls">
+        <div class="field">Pour
+          <div class="seg small" id="pour">
+            <button data-value="light">Short</button>
+            <button data-value="standard" class="on">Standard</button>
+            <button data-value="double">Double</button>
+          </div>
+        </div>
+        <div class="field">Pace
+          <div class="seg small" id="pace">
+            <button data-value="sip">Sip</button>
+            <button data-value="normal" class="on">Normal</button>
+            <button data-value="chug">Chug</button>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="drink-btn" class="primary big" disabled>🥂 Drink up!</button>
+        <div class="row extras">
+          <button id="fries" class="ghost small">🍟 Fries</button>
+          <button id="wait" class="ghost small">⏳ Wait 15 min</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <nav id="sheet-tabs" hidden>
+    <button data-sheet="menu" aria-pressed="false">🍸 Bartender</button>
+    <button data-sheet="chat" aria-pressed="true">💬 Chat</button>
+  </nav>
+
+  <aside id="chat" hidden>
+    <div id="log" role="log" aria-label="Conversation"></div>
+    <form id="composer">
+      <input id="input" autocomplete="off" placeholder="Say something… or tell them to drink" maxlength="400">
+      <button class="primary" id="send">Send</button>
+    </form>
+  </aside>
+
+  <section id="gameover" class="modal bottom" hidden>
+    <div class="card">
+      <h1 id="go-title">💤 Out cold</h1>
+      <p id="go-summary"></p>
+      <p class="fine" id="go-fine">In real life, a BAC around 0.30% is alcohol poisoning. Someone that drunk needs medical help, not a nap: call emergency services and don't leave them alone.</p>
+      <div class="row">
+        <button id="again" class="primary">New night</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
