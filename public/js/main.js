@@ -1,5 +1,5 @@
 import { createBar, randomLook, isValidLook } from "./scene.js";
-import { DRINKS, PACES, MOOD_LABELS, Night, findDrinkInText, pourGlass } from "./engine.js";
+import { DRINKS, PACES, MOOD_LABELS, Night, findDrinkInText, pourGlass, PASS_OUT_BAC } from "./engine.js";
 import { audio } from "./audio.js";
 import { createBarTalk, makeBackstory } from "./bartalk.js";
 
@@ -225,7 +225,7 @@ async function crashMontage() {
     wasted: "(Stage direction: it's hitting you hard. You knock your elbow on the table and everything is very funny or very sad.)",
     blackout: "(Stage direction: you're fighting to keep your eyes open and can barely hold your head up.)",
   };
-  while (night.bac < 0.3 && night.rising) {
+  while (!night.outCold && night.rising) {
     const minutes = night.advanceToNextStage();
     updateHud();
     const beat = BEATS[night.stage.key];
@@ -498,8 +498,8 @@ function updateHud() {
   document.body.dataset.stage = stage.key;
   document.documentElement.style.setProperty("--stage", stage.color);
   $("bac").textContent = night.bac.toFixed(3);
-  $("bac-fill").style.width = `${Math.min(100, (night.bac / 0.3) * 100)}%`;
-  $("bac-ghost").style.width = over ? "0" : `${Math.min(100, (night.projectedBac / 0.3) * 100)}%`;
+  $("bac-fill").style.width = `${Math.min(100, (night.bac / PASS_OUT_BAC) * 100)}%`;
+  $("bac-ghost").style.width = over ? "0" : `${Math.min(100, (night.projectedBac / PASS_OUT_BAC) * 100)}%`;
   $("bac-ghost").title = `Still kicking in: heading toward ${night.projectedBac.toFixed(3)}%`;
   $("stage").textContent = stage.label;
   $("trend").hidden = over || !night.rising;

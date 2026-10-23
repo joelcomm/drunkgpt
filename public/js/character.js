@@ -6,7 +6,7 @@ import * as THREE from "three";
 // ---------- toon materials and ink outlines ----------
 
 const GRADIENT = (() => {
-  const tex = new THREE.DataTexture(new Uint8Array([115, 165, 210, 240]), 4, 1, THREE.RedFormat);
+  const tex = new THREE.DataTexture(new Uint8Array([100, 150, 192, 215]), 4, 1, THREE.RedFormat);
   tex.minFilter = tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
   return tex;
@@ -115,7 +115,8 @@ function sculptHead(woman) {
 
 // ---------- palettes ----------
 
-export const SKIN_TONES = [0xf6d6bd, 0xedc09a, 0xd29a6c, 0xa86d47, 0x76482c, 0xfbe2d0];
+// Warm, saturated tones; the cel bands lighten skin a lot, so even the fairest one is a real peach.
+export const SKIN_TONES = [0xe9b08a, 0xdb9a6e, 0xc4824f, 0xa0633b, 0x74452a, 0xf0bf9a];
 export const HAIR_COLORS = [0x1c120c, 0x3b2414, 0x6b3e1e, 0xb5371f, 0x7a2a12, 0xe0b45e, 0x8a8a8a];
 export const JACKET_COLORS = [0x22314f, 0x2b2b30, 0x5a1d2b, 0x2d4a3a, 0x6b5434, 0x40336b];
 export const DRESS_COLORS = [0xc8102e, 0x16121a, 0x0f6e52, 0x6e0f30, 0x2340b0, 0x8a2bc2];

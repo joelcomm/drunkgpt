@@ -142,7 +142,7 @@ const LINES = {
 
 // ELIZA reflections and catch-alls.
 const REFLECT = { i: "you", me: "you", my: "your", mine: "yours", am: "are", "i'm": "you're", "i've": "you've", "i'll": "you'll", "i'd": "you'd", myself: "yourself", you: "I", your: "my", yours: "mine", "you're": "I'm", yourself: "myself", are: "am" };
-const reflect = (s) => s.toLowerCase().replace(/[.!?]+$/, "").split(/\s+/).map((w) => REFLECT[w] ?? w).join(" ");
+const reflect = (s) => s.replace(/[.!?]+$/, "").split(/\s+/).map((w) => REFLECT[w.toLowerCase()] ?? (w === "I" ? "you" : w)).join(" ");
 
 const ELIZA = [
   [/\bi(?:'m| am) (.+)/i, ["[neutral] You're {1}? How long have you been {1}?", "[surprised] Why are you {1}? Tell me everything.", "[happy] You're {1}! Me too. Wait. Am I? Probably."]],
@@ -183,7 +183,7 @@ function slurWord(w, level) {
   let out = w;
   if (level >= 0.5 && chance(level * 0.55)) out = out.replace(/s(?!h)/gi, (m) => (m === "S" ? "SH" : "sh"));
   if (level >= 0.5 && chance(0.7)) out = out.replace(/ing\b/gi, "in'");
-  if (level >= 0.55 && chance(level * 0.14) && out.length > 3) {
+  if (level >= 0.55 && chance(level * 0.14) && out.length >= 5) {
     const i = 1 + rand(out.length - 2);
     // Swap two neighbouring lowercase letters; never punctuation or a capital.
     if (/[a-z]{2}/.test(out.slice(i, i + 2))) out = out.slice(0, i) + out[i + 1] + out[i] + out.slice(i + 2);
@@ -226,152 +226,410 @@ function pick(list) {
 
 // ---------- the brain ----------
 
+const MORE = {
+  crude: [
+    "[angry] *raises an eyebrow* Eyes up here, pal. My face is the one doing the talking.",
+    "[angry] Wow. Smooth. Real smooth. Do you talk to your mother with that mouth?",
+    "[laugh] *snorts* Oh, you did NOT just say that. Strike one, {you}.",
+    "[angry] Easy, tiger. Keep it classy or keep it moving.",
+  ],
+  crudeLast: [
+    "[angry] *flicks the rest of the drink at you* Nope. We are DONE here.",
+    "[angry] That's two. I don't do three. Enjoy drinking alone, {you}.",
+  ],
+  apology: [
+    "[happy] Apology accepted. Buy me a drink and it's water under the bridge. Vodka under the bridge.",
+    "[love] Aww. Okay. You're forgiven. Mostly. Like eighty percent.",
+  ],
+  noNeedSorry: ["[laugh] Sorry for what? You're doing great. I'm the one who's three drinks in.", "[happy] Don't be sorry! Be thirsty."],
+  confused: {
+    sober: ["[laugh] Ha, sorry. My brain wandered off for a second. What were we talking about?", "[neutral] Was that weird? I get weird when I'm nervous. Ask me again, I'll do better."],
+    drunk: ["[laugh] Weird? I've had {drinks} drinks, {you}. You're lucky I'm using WORDS.", "[laugh] It made sense in my head. EVERYTHING makes sense in my head.", "[sad] Sorry, sorry. My thoughts took the scenic route. Ask me again."],
+  },
+  bot: ["[laugh] A robot? Robots don't get hiccups. *hic* See? Flesh and bone. Mostly tequila.", "[surprised] Am I REAL? Pinch me. No, don't pinch me. I bruise like a peach.", "[laugh] I'm about as artificial as this cheese dip, and that's... okay, fair point."],
+  drunkAccused: {
+    sober: ["[laugh] Drunk? I've barely started. Give me time.", "[neutral] Not yet! The night is young and so is my liver."],
+    tipsy: ["[laugh] I'm not drunk. I'm... festive.", "[happy] Tipsy, maybe. A little. A smidge. A smidge and a half."],
+    drunk: ["[laugh] I'm not drunk. You're drunk. And there's two of you.", "[love] I'm not drunk, I'm FLAVORED."],
+    wasted: ["[sick] Who's drunk? *points at the wrong person* That guy.", "[sleepy] I'm... perfectly... fine... *slides down the booth a little*"],
+  },
+  live: ["[happy] I live in {from}. Above a laundromat. Everything I own smells like dryer sheets.", "[neutral] Little place in {from}. Two rooms, one plant, zero idea how to keep the plant alive."],
+  age: ["[laugh] Old enough to drink, young enough to regret it tomorrow.", "[neutral] A lady never tells. A drunk lady might. Ask me in two drinks."],
+  pets: ["[love] I have a cat named Meatball. He hates me. I love him.", "[happy] Dogs! Every dog. All of them. I would die for a corgi."],
+  hobbies: ["[happy] For fun? Karaoke. Badly. And reorganizing my spice rack when I'm sad.", "[laugh] I collect snow globes. I've never seen real snow. It's complicated."],
+  travel: ["[love] I went to Italy once. Ate pasta for nine days straight. Best week of my life.", "[happy] I want to see the Northern Lights. Or Vegas. Either one, honestly."],
+  movies: ["[happy] I cry at every movie. Pixar? Destroyed. Car commercials? Destroyed.", "[laugh] My comfort movie is a heist movie. I've seen it forty times. I could pull off that heist."],
+  sports: ["[laugh] Sports? I like the snacks. And the yelling. Mostly the yelling.", "[happy] I'll root for whoever has the cutest mascot."],
+  weather: ["[neutral] The weather? Wow. Are we THAT kind of conversation? Okay. It's... weathery.", "[laugh] It's always nice weather in a bar. No windows. No consequences."],
+  politics: ["[laugh] Oh no. No no. Not after this many drinks. I'll start a war.", "[neutral] House rule: no politics, no religion, no talking about my ex. Two out of three, anyway."],
+  dream: ["[love] My dream? Open a little bar. Just like this. But the candles actually smell nice.", "[happy] I want to be on a game show. Any game show. I'd crush it."],
+  likeMe: ["[love] Do I like you? You're buying the drinks. So far? Yes.", "[happy] I like you! You've got a good face for a bar."],
+  userLeaving: ["[sad] Nooo! One more. ONE more. Then you can go.", "[surprised] You're leaving? But who will I tell about the goat?"],
+  bored: ["[neutral] Bored? Okay, okay. Ask me anything. Anything! I'm an open book. A slightly sticky book.", "[laugh] Let's play a game. I say a word, you say the first thing you think of. Ready? Pickles."],
+  ack: ["[happy] Ha! I like that.", "[neutral] Huh. Okay, I can see that.", "[laugh] You're funny. You know that?", "[happy] Mm-hm, mm-hm."],
+  doYou: ["[happy] Do I {1}? Absolutely. Every chance I get.", "[laugh] Do I {1}? Not since the incident.", "[neutral] Do I {1}? Only on weekends. And Wednesdays.", "[love] Do I {1}? With my whole heart."],
+  areYou: ["[laugh] Am I {1}? Depends who's asking. You're asking. So... maybe!", "[happy] Me? {1}? Ha! Little bit.", "[neutral] Am I {1}? My mom would say yes."],
+  canYou: ["[laugh] Can I {1}? Watch me. Actually, don't watch me.", "[happy] Can I {1}? Probably not. Will I try? Yes."],
+  haveYou: ["[laugh] Have I ever {1}? Twice. Once on purpose.", "[surprised] Have I {1}? ...I'm not legally allowed to answer that.", "[neutral] Never! But it's on the list."],
+  wouldYou: ["[laugh] Would I {1}? For a basket of fries? Yes.", "[neutral] Would I {1}? Ask me after the next round."],
+  favorite: ["[happy] My favorite {1}? Whatever's closest to me right now.", "[laugh] Favorite {1}? Ooh. Tough. I'm gonna say... yes."],
+};
+
+// Questions the buddy asks to keep the conversation going; the next reply is taken as the answer.
+const ASKS = {
+  job: { q: ["[happy] So what do you do, {you}?", "[neutral] Wait, what do you do for work? I never asked!"], react: ["[surprised] {a}? No way! That's way cooler than what I do.", "[happy] {a}! I knew it. You have total {A} energy."] },
+  from: { q: ["[happy] Where are you from, anyway?", "[neutral] Are you from around here?"], react: ["[happy] {a}! I've always wanted to go there. Don't tell me about it, I'm picturing it.", "[laugh] {a}? I knew a guy from there. He owed me twenty bucks."] },
+  pets: { q: ["[neutral] Important question. Cats or dogs?", "[happy] Do you have any pets? Tell me everything."], react: ["[love] {a}! Okay, you're officially a good person.", "[laugh] {a}. Interesting. I'm judging you a little. Lovingly."] },
+  worstDate: { q: ["[laugh] What's the worst date you've ever been on?", "[neutral] Okay, worst date. Go. I need this."], react: ["[laugh] {a}? Oh no. Oh NO. *wheezes* Okay, mine was worse, but still.", "[surprised] {a}?! I'm so sorry. That's legendary, though."] },
+  karaoke: { q: ["[happy] What's your karaoke song? Everybody has one.", "[laugh] If I dragged you to karaoke, what are you singing?"], react: ["[laugh] {a}?! Okay, you're singing it later. That's the rule.", "[love] {a}. Great choice. Tears will be shed."] },
+  fun: { q: ["[happy] What do you do for fun?", "[neutral] When you're not here, what are you up to?"], react: ["[happy] {a}! Okay, I'm into that.", "[laugh] {a}? I mostly do... this. *gestures at drink*"] },
+  dream: { q: ["[love] If you could quit everything tomorrow, what would you do?", "[neutral] What's your big dream, {you}? The real one."], react: ["[love] {a}... I can see it. I can totally see it.", "[happy] {a}! Do it. I'll be your first customer. Or fan. Or whatever."] },
+};
+const ASK_ORDER = ["job", "from", "pets", "fun", "karaoke", "worstDate", "dream"];
+const WRONG_RECALL = ["a dentist", "a dolphin trainer", "an astronaut", "a mime", "from the moon"];
+
 const RE = {
-  hello: /^\s*(hi|hey|hello|yo|sup|howdy|hiya|heya|what'?s up)\b/i,
-  howAreYou: /how (are|r) (you|u|ya)|how('?s| is) it going|how (do|d'?ya) (you )?feel|you (ok|okay|alright|good)\??$/i,
-  name: /what'?s your name|who are you|your name/i,
-  job: /what do you do|your job|for (a )?living|where do you work|what'?s your work/i,
-  from: /where.*\bfrom\b|hometown|where did you grow up/i,
-  secret: /secret|confess|tell me something|tell me a truth|something about you/i,
-  love: /\b(boyfriend|girlfriend|husband|wife|married|single|dating|date|love life|crush|\bex\b|relationship)/i,
-  compliment: /\b(you('?re| are)|you look|ur)\b.{0,12}\b(pretty|beautiful|cute|hot|gorgeous|handsome|funny|cool|great|awesome|amazing|stunning|smart|nice|sweet|the best)\b/i,
-  flirt: /\b(sexy|kiss|marry me|go out with me|your place|my place|date me|wink)\b/i,
-  insult: /\b(you('?re| are)|you look|ur)\b.{0,12}\b(ugly|boring|stupid|dumb|annoying|lame|gross|loser|idiot|terrible|awful|a mess|pathetic|fat)\b|shut up|i hate you|nobody likes you|you suck|get lost|screw you/i,
-  goHome: /\b(go home|leave|get out|beat it|scram|time to go|call it a night|go to bed|head home|get lost)\b/i,
+  crude: /\b(boobs?|tits?|titties|breasts?|rack|butt|booty|ass|nipples?|cleavage|naked|nude|strip|take (it|that|your \w+) off|sleep with me|hook up|bang|sex|horny|dtf|thicc|f+u+c+k me)\b/i,
+  insult: /\b(you('?re| are)|you look|ur)\b.{0,12}\b(ugly|boring|stupid|dumb|annoying|lame|gross|loser|idiot|terrible|awful|a mess|pathetic|fat|a bitch|a slut|trash)\b|shut up|i hate you|nobody likes you|you suck|screw you|f+u+c+k (you|off)/i,
+  apology: /\b(sorry|apologi[sz]e|my bad|didn'?t mean (it|that))\b/i,
+  goHome: /\b(go home|leave|get out|beat it|scram|call it a night|go to bed|head home|get lost|go away)\b/i,
   dontLeave: /\b(don'?t|do not|never|please don'?t)\b.{0,10}\b(leave|go)\b/i,
+  userLeaving: /\b(i (have|need|gotta|got) to go|i'?m (leaving|heading out|going home)|gotta go|good ?night|bye|see ya|later)\b/i,
+  bot: /\b(are you|you'?re|you are|is this)\b.{0,12}\b(an? )?(ai|bot|robot|computer|chat ?gpt|program|machine|npc|real person|real)\b/i,
+  confused: /\b(weird|random|makes no sense|doesn'?t make sense|nonsense|not listening|didn'?t answer|answer the question|what are you talking about|huh|wtf|that'?s not what i)\b|^\s*what\??\s*$|^\s*\?+\s*$/i,
+  drunkAccused: /\b(you('?re| are)|ur|you seem|you look)\b.{0,10}\b(drunk|wasted|tipsy|hammered|smashed|plastered|buzzed|lit|trashed)\b/i,
+  hello: /^\s*(hi|hey|hello|yo|sup|howdy|hiya|heya|what'?s up|good evening)\b/i,
+  howAreYou: /how (are|r) (you|u|ya)|how('?s| is) it going|how (do|d'?ya) (you )?feel|are you (ok|okay|alright|good)|how you doing|how'?re you/i,
+  name: /what'?s your name|who are you|your name/i,
+  job: /what do you do|your job|for (a )?living|where do you work|what'?s your work|what kind of work/i,
+  live: /where do you (live|stay)|your (place|apartment|house)|live around here/i,
+  from: /where.*\bfrom\b|hometown|where did you grow up|where are you based/i,
+  age: /how old|your age|what age|born in/i,
+  secret: /secret|confess|tell me something|tell me a truth|something about you|tell me about (yourself|you)/i,
+  love: /\b(boyfriend|girlfriend|husband|wife|married|single|dating|date|love life|crush|\bex\b|relationship|partner)\b/i,
+  likeMe: /do you like me|am i (cute|hot|your type)|do you think i'?m/i,
+  compliment: /\b(you('?re| are)|you look|ur|your (eyes|hair|smile|dress|outfit))\b.{0,14}\b(pretty|beautiful|cute|hot|gorgeous|handsome|funny|cool|great|awesome|amazing|stunning|smart|nice|sweet|lovely|the best)\b/i,
+  flirt: /\b(sexy|kiss|marry me|go out with me|your number|date me|wink|flirt)\b/i,
   joke: /\bjoke|make me laugh|something funny|funny story/i,
-  sing: /\bsing|song|karaoke/i,
+  sing: /\bsing|karaoke/i,
   dance: /\bdanc/i,
   drive: /\b(drive|driving|car keys|my car|keys|behind the wheel)\b/i,
-  laugh: /\b(ha(ha)+|lol|lmao|rofl|hehe|😂|🤣)\b|^\s*ha+\s*$/i,
+  laugh: /\b(ha(ha)+|lol|lmao|rofl|hehe)\b|😂|🤣|^\s*ha+\s*!*$/i,
   thanks: /\b(thanks|thank you|thx|ty)\b/i,
-  sad: /\bi('?m| am| feel)\b.{0,10}\b(sad|lonely|tired|depressed|stressed|upset|down|awful|bad)\b/i,
+  sad: /\bi('?m| am| feel)\b.{0,10}\b(sad|lonely|tired|depressed|stressed|upset|down|awful|bad|anxious)\b/i,
   happy: /\bi('?m| am| feel)\b.{0,10}\b(happy|great|good|amazing|awesome|fantastic)\b/i,
-  family: /\b(mom|mother|dad|father|sister|brother|family|kids|son|daughter)\b/i,
-  money: /\b(money|rich|broke|pay|salary|bills)\b/i,
-  music: /\b(music|band|jukebox|concert)\b/i,
-  food: /\b(food|hungry|eat|pizza|burger|nachos|tacos)\b/i,
+  bored: /\b(bored|boring night|this is boring)\b/i,
+  pets: /\b(pets?|cats?|dogs?|kitten|puppy)\b/i,
+  hobbies: /\bfor fun|hobb(y|ies)|free time|weekends?\b/i,
+  travel: /\b(travel|vacation|trip|been to|visit)\b/i,
+  movies: /\b(movie|film|tv|show|netflix|series)\b/i,
+  sports: /\b(sports?|game|team|football|baseball|basketball|soccer|hockey)\b/i,
+  weather: /\b(weather|rain|snow|hot out|cold out)\b/i,
+  politics: /\b(politic\w*|election|president|religion|god|church)\b/i,
+  dream: /\b(dream|goal|ambition|bucket list)\b/i,
+  family: /\b(mom|mother|dad|father|sister|brother|family|kids|son|daughter|parents)\b/i,
+  money: /\b(money|rich|broke|salary|bills)\b/i,
+  music: /\b(music|band|jukebox|concert|song)\b/i,
+  food: /\b(food|hungry|eat|pizza|burger|nachos|tacos|fries)\b/i,
   favoriteDrink: /favou?rite drink|what (do you|would you) (want|like) to drink|what('?s| is) your drink|what are you drinking/i,
-  yes: /^\s*(yes|yeah|yep|yup|sure|definitely|totally|absolutely)\b/i,
+  favorite: /what'?s your fav(ou?rite)? (\w+(?: \w+)?)/i,
+  doYou: /^\s*do you (.+?)\??$/i,
+  areYou: /^\s*are you (.+?)\??$/i,
+  canYou: /^\s*can you (.+?)\??$/i,
+  haveYou: /^\s*have you( ever)? (.+?)\??$/i,
+  wouldYou: /^\s*would you (.+?)\??$/i,
+  yes: /^\s*(yes|yeah|yep|yup|sure|definitely|totally|absolutely|of course)\b/i,
   no: /^\s*(no|nope|nah|never)\b/i,
   why: /^\s*why\b/i,
+  andYou: /^\s*(and )?(you|what about you|how about you|and you|u)\s*\??\s*$/i,
   myName: /\b(?:my name is|call me|i'?m called)\s+([a-z][\w'-]*)/i,
 };
 
+// Pulls a short answer out of a reply ("I'm a nurse, why?" -> "a nurse").
+function extractAnswer(text) {
+  let a = text.trim().replace(/[.!?]+$/, "");
+  a = a.replace(/^(well|um+|uh+|honestly|haha|lol|oh|so)[, ]+/i, "");
+  a = a.replace(/^(i'?m|i am|i work as|i work in|i work at|i do|i'?m from|i live in|i grew up in|it'?s|it was|my|mine is|probably|definitely)\s+/i, "");
+  a = a.split(/[,;]| but | and then | because /i)[0];
+  const words = a.split(/\s+/).slice(0, 7).join(" ");
+  return words.length > 1 ? words : null;
+}
+
 export function createBarTalk(persona) {
   const bio = persona.backstory;
-  const memory = { insults: 0, leaveAsks: 0, told: new Set(), recent: [], userName: persona.userName, topics: [] };
+  const memory = {
+    strikes: 0,
+    leaveAsks: 0,
+    told: new Set(),
+    recent: [],
+    userName: persona.userName,
+    user: {}, // what the player told us: job, from, pets, ...
+    asked: new Set(),
+    expecting: null, // the question we just asked, if any
+    turns: 0,
+    lastTangent: -9,
+    drinks: {}, // drink id -> count
+  };
 
-  // Draws from a pool while avoiding the last few lines used.
   const draw = (pool) => {
     const fresh = pool.filter((l) => !memory.recent.includes(l));
     const line = pick(fresh.length ? fresh : pool);
     memory.recent.push(line);
-    if (memory.recent.length > 24) memory.recent.shift();
+    if (memory.recent.length > 30) memory.recent.shift();
     return line;
   };
 
-  const fill = (line, captured = "") =>
+  const totalDrinks = () => Object.values(memory.drinks).reduce((a, b) => a + b, 0);
+  const fill = (line, captured = "", answer = "") =>
     line
       .replaceAll("{you}", memory.userName || "pal")
       .replaceAll("{me}", persona.name)
       .replaceAll("{from}", bio.from)
-      .replaceAll("{1}", captured);
+      .replaceAll("{drinks}", String(Math.max(1, totalDrinks())))
+      .replaceAll("{1}", captured)
+      .replaceAll("{a}", answer)
+      .replaceAll("{A}", answer.replace(/^(a|an|the)\s+/i, ""));
 
-  function stageLine(group, stage) {
-    const pool = STAGE_LINES[group][stage] ?? STAGE_LINES[group].drunk ?? STAGE_LINES[group].tipsy;
-    return draw(pool);
+  const stageLine = (group, stage) => draw(STAGE_LINES[group][stage] ?? STAGE_LINES[group].drunk ?? STAGE_LINES[group].tipsy);
+  const byStage = (table, stage) => table[stage] ?? (STAGE_LEVEL[stage] >= 0.85 ? table.wasted ?? table.drunk : table.drunk ?? table.sober);
+
+  // Sometimes the buddy drives the conversation with a question of their own.
+  function maybeAsk(force = false) {
+    if (memory.expecting || (!force && !chance(0.4))) return "";
+    const topic = ASK_ORDER.find((t) => !memory.asked.has(t));
+    if (!topic) return "";
+    memory.asked.add(topic);
+    memory.expecting = topic;
+    return " " + draw(ASKS[topic].q).replace(/^\[\w+\]\s*/, "");
+  }
+
+  // Bringing up what the player said earlier; wasted, they get it hilariously wrong.
+  function recall(level) {
+    const known = Object.entries(memory.user);
+    if (!known.length || !chance(0.5)) return null;
+    const [topic, value] = pick(known);
+    if (level >= 0.85) return `[love] Wait wait wait. You're ${pick(WRONG_RECALL)}, right? No? ...I was close.`;
+    const phrasing = {
+      job: `[love] I can't believe you're ${value}. I'm gonna tell everyone I know ${value}.`,
+      from: `[happy] ${value}! I keep thinking about ${value}. Is everyone there as fun as you?`,
+      pets: `[love] Tell me more about ${value}. I'm emotionally invested now.`,
+      karaoke: `[laugh] I'm still thinking about you singing ${value}. It's happening tonight.`,
+      worstDate: `[laugh] I can't stop thinking about your date. ${value}! *wheezes*`,
+      fun: `[happy] So you're into ${value}. You're full of surprises, {you}.`,
+      dream: `[love] Promise me you'll do the ${value} thing. Promise!`,
+    }[topic];
+    return phrasing ?? null;
   }
 
   function backstoryTangent(level) {
-    if (level >= 0.35 && !memory.told.has("secret") && chance(0.35)) {
+    if (memory.turns - memory.lastTangent < 4) return null;
+    memory.lastTangent = memory.turns;
+    if (level >= 0.35 && !memory.told.has("secret") && chance(0.5)) {
       memory.told.add("secret");
-      return draw(bio.secret.lines).replace(/^/, "[sad] ");
+      return "[sad] Can I tell you something? " + draw(bio.secret.lines);
     }
-    if (!memory.told.has("job") && chance(0.25)) {
+    if (!memory.told.has("job") && chance(0.4)) {
       memory.told.add("job");
       return "[happy] " + draw(bio.job.lines);
     }
-    if (chance(0.3)) return "[laugh] " + draw(bio.quirk.lines);
-    // Drunk people repeat themselves.
     if (level >= 0.6 && memory.told.size && chance(0.5)) {
-      const again = memory.told.has("secret") ? draw(bio.secret.lines) : draw(bio.job.lines);
-      return `[love] Did I tell you this? ${again}`;
+      return `[love] Did I tell you this? ${memory.told.has("secret") ? draw(bio.secret.lines) : draw(bio.job.lines)}`;
     }
-    return null;
+    return "[laugh] " + draw(bio.quirk.lines);
   }
 
   function moodFlavor(mood, level) {
-    if (!mood || level < 0.15 || !chance(0.25 + level * 0.4)) return "";
+    if (!mood || level < 0.15 || !chance(0.2 + level * 0.35)) return "";
     return " " + pick(MOOD_TAGS[mood] ?? []);
   }
 
-  // Turns a line into { text, expression }, applying slur and booze flavor.
   function finish(line, stage, mood) {
     const level = STAGE_LEVEL[stage] ?? 0;
     const m = line.match(/^\[(\w+)\]\s*/);
     const expression = m ? m[1] : "neutral";
     let text = m ? line.slice(m[0].length) : line;
+    text = text.replace(/^(\*[^*]+\*\s*)?([a-z])/, (_, act = "", c) => act + c.toUpperCase());
     text += moodFlavor(mood, level);
     return { text: drunkify(text, stage).trim(), expression: level >= 1 ? "sleepy" : expression };
+  }
+
+  // Answering a question the buddy asked last turn.
+  function takeAnswer(text, stage) {
+    const topic = memory.expecting;
+    memory.expecting = null;
+    if (RE.andYou.test(text)) return null;
+    const isQuestion = /\?\s*$/.test(text) || /^\s*(what|where|who|why|how|when|do|does|are|is|can|could|would|will|have|did)\b/i.test(text);
+    const isOtherIntent = ["bot", "confused", "drunkAccused", "howAreYou", "secret", "joke", "sing", "dance", "compliment", "flirt", "drive"].some((k) => RE[k].test(text));
+    if (isQuestion || isOtherIntent) return null;
+    if (topic === "pets") {
+      const a = /\bcats?\b/i.test(text) && /\bdogs?\b/i.test(text) ? "both" : /\bcats?\b/i.test(text) ? "cats" : /\bdogs?\b/i.test(text) ? "dogs" : extractAnswer(text);
+      if (!a) return null;
+      memory.user.pets = a === "both" ? "your cats and dogs" : a;
+      return a === "both" ? "[laugh] Both?! Greedy. I respect it." : a === "cats" ? "[love] A cat person. Mysterious. Aloof. I like it." : a === "dogs" ? "[happy] Dog person! Loyal. Excitable. Like me after three drinks." : fill(draw(ASKS.pets.react), "", a);
+    }
+    const a = extractAnswer(text);
+    if (!a || (RE.no.test(text) && text.split(/\s+/).length <= 2)) return "[laugh] Mysterious! Fine, keep your secrets.";
+    memory.user[topic] = a;
+    return fill(draw(ASKS[topic].react), "", a);
   }
 
   function respondToText(raw, stage, mood) {
     const text = raw.trim();
     const level = STAGE_LEVEL[stage] ?? 0;
+    memory.turns++;
+
+    // Things that matter more than anything else.
+    if (RE.crude.test(text)) {
+      memory.strikes++;
+      memory.expecting = null;
+      return memory.strikes >= 2 ? { line: draw(MORE.crudeLast), leave: true, bye: true } : { line: draw(MORE.crude) };
+    }
+    if (RE.insult.test(text)) {
+      memory.strikes++;
+      memory.expecting = null;
+      return memory.strikes >= 2 ? { line: draw(LINES.insultAgain), leave: true } : { line: draw(LINES.insult) };
+    }
+    if (RE.apology.test(text)) {
+      if (memory.strikes > 0) {
+        memory.strikes--;
+        return { line: draw(MORE.apology) };
+      }
+      return { line: draw(MORE.noNeedSorry) };
+    }
+    if (RE.goHome.test(text) && !RE.dontLeave.test(text) && !RE.userLeaving.test(text)) {
+      memory.leaveAsks++;
+      const ready = memory.strikes >= 1 || memory.leaveAsks >= 3 || (level >= 0.85 && memory.leaveAsks >= 2);
+      return ready ? { line: draw(LINES.goodbye), leave: true, bye: true } : { line: draw(LINES.refuseLeave) };
+    }
+
+    // An answer to the question we just asked.
+    if (memory.expecting) {
+      const reaction = takeAnswer(text, stage);
+      if (reaction) return { line: reaction + maybeAsk() };
+    }
+
     const nameMatch = text.match(RE.myName);
     if (nameMatch) {
       memory.userName = nameMatch[1][0].toUpperCase() + nameMatch[1].slice(1);
       return { line: `[happy] ${memory.userName}! Great name. I'm gonna yell it later. Fair warning.` };
     }
-    if (RE.insult.test(text)) {
-      memory.insults++;
-      if (memory.insults >= 2) return { line: draw(LINES.insultAgain), leave: true };
-      return { line: draw(LINES.insult) };
+
+    const simple = [
+      ["bot", MORE.bot],
+      ["confused", null],
+      ["drunkAccused", null],
+      ["userLeaving", MORE.userLeaving],
+      ["drive", LINES.drive],
+      ["howAreYou", null],
+      ["name", LINES.name],
+      ["job", null],
+      ["live", MORE.live],
+      ["from", LINES.from],
+      ["age", MORE.age],
+      ["secret", null],
+      ["favoriteDrink", null],
+      ["likeMe", MORE.likeMe],
+      ["flirt", LINES.flirt],
+      ["compliment", LINES.compliment],
+    ];
+    const topics = [
+      ["love", null],
+      ["joke", LINES.joke],
+      ["sing", LINES.sing],
+      ["dance", LINES.dance],
+      ["sad", LINES.sad],
+      ["happy", LINES.happy],
+      ["bored", MORE.bored],
+      ["laugh", LINES.laugh],
+      ["thanks", LINES.thanks],
+      ["politics", MORE.politics],
+      ["pets", MORE.pets],
+      ["hobbies", MORE.hobbies],
+      ["travel", MORE.travel],
+      ["movies", MORE.movies],
+      ["sports", MORE.sports],
+      ["weather", MORE.weather],
+      ["dream", MORE.dream],
+      ["family", LINES.family],
+      ["money", LINES.money],
+      ["music", LINES.music],
+      ["food", LINES.food],
+    ];
+    for (const [key, pool] of simple) {
+      if (!RE[key].test(text)) continue;
+      switch (key) {
+        case "confused":
+          return { line: draw(level < 0.35 ? MORE.confused.sober : MORE.confused.drunk) + maybeAsk(true) };
+        case "drunkAccused":
+          return { line: draw(byStage(MORE.drunkAccused, stage)) };
+        case "howAreYou":
+          return { line: stageLine("howAreYou", stage) + maybeAsk() };
+        case "job":
+          memory.told.add("job");
+          return { line: "[happy] " + draw(bio.job.lines) + (memory.asked.has("job") ? "" : " What about you?"), expect: memory.asked.has("job") ? null : "job" };
+        case "secret":
+          if (level < 0.35) return { line: draw(LINES.secretTooSober) };
+          memory.told.add("secret");
+          return { line: "[sad] " + draw(bio.secret.lines) };
+        case "favoriteDrink":
+          return { line: `[happy] ${mood === "tequila" ? "TEQUILA. Obviously." : mood ? "Whatever you just gave me. More of that." : "Surprise me! But make it strong."}` };
+        case "love":
+          return { line: draw(level >= 0.6 ? LINES.loveDrunk : LINES.love) };
+        default:
+          return { line: draw(pool) + (["howAreYou", "live", "from", "pets", "hobbies", "travel", "movies", "music"].includes(key) ? maybeAsk() : "") };
+      }
     }
-    if (RE.goHome.test(text) && !RE.dontLeave.test(text)) {
-      memory.leaveAsks++;
-      const ready = memory.insults >= 1 || memory.leaveAsks >= 3 || (level >= 0.85 && memory.leaveAsks >= 2);
-      return ready ? { line: draw(LINES.goodbye), leave: true } : { line: draw(LINES.refuseLeave) };
+
+    // Questions shaped like "do you / are you / can you ... ?" get answers built from the player's own words.
+    for (const [key, group] of [["favorite", 2], ["doYou", 1], ["areYou", 1], ["canYou", 1], ["haveYou", 2], ["wouldYou", 1]]) {
+      const m = text.match(RE[key]);
+      if (m) return { line: draw(MORE[key]), captured: reflect(m[group]).slice(0, 50) };
     }
-    if (RE.drive.test(text)) return { line: draw(LINES.drive) };
-    if (RE.howAreYou.test(text)) return { line: stageLine("howAreYou", stage) };
-    if (RE.name.test(text)) return { line: draw(LINES.name) };
-    if (RE.job.test(text)) {
-      memory.told.add("job");
-      return { line: "[happy] " + draw(bio.job.lines) };
+
+    for (const [key, pool] of topics) {
+      if (!RE[key].test(text)) continue;
+      switch (key) {
+        case "confused":
+          return { line: draw(level < 0.35 ? MORE.confused.sober : MORE.confused.drunk) + maybeAsk(true) };
+        case "drunkAccused":
+          return { line: draw(byStage(MORE.drunkAccused, stage)) };
+        case "howAreYou":
+          return { line: stageLine("howAreYou", stage) + maybeAsk() };
+        case "job":
+          memory.told.add("job");
+          return { line: "[happy] " + draw(bio.job.lines) + (memory.asked.has("job") ? "" : " What about you?"), expect: memory.asked.has("job") ? null : "job" };
+        case "secret":
+          if (level < 0.35) return { line: draw(LINES.secretTooSober) };
+          memory.told.add("secret");
+          return { line: "[sad] " + draw(bio.secret.lines) };
+        case "favoriteDrink":
+          return { line: `[happy] ${mood === "tequila" ? "TEQUILA. Obviously." : mood ? "Whatever you just gave me. More of that." : "Surprise me! But make it strong."}` };
+        case "love":
+          return { line: draw(level >= 0.6 ? LINES.loveDrunk : LINES.love) };
+        default:
+          return { line: draw(pool) + (["howAreYou", "live", "from", "pets", "hobbies", "travel", "movies", "music"].includes(key) ? maybeAsk() : "") };
+      }
     }
-    if (RE.from.test(text)) return { line: draw(LINES.from) };
-    if (RE.secret.test(text)) {
-      if (level < 0.35) return { line: draw(LINES.secretTooSober) };
-      memory.told.add("secret");
-      return { line: "[sad] " + draw(bio.secret.lines) };
-    }
-    if (RE.favoriteDrink.test(text)) return { line: `[happy] ${mood === "tequila" ? "TEQUILA. Obviously." : mood ? "Whatever you just gave me. More of that." : "Surprise me! But make it strong."}` };
-    if (RE.flirt.test(text)) return { line: draw(LINES.flirt) };
-    if (RE.compliment.test(text)) return { line: draw(LINES.compliment) };
-    if (RE.love.test(text)) return { line: draw(level >= 0.6 ? LINES.loveDrunk : LINES.love) };
-    if (RE.joke.test(text)) return { line: draw(LINES.joke) };
-    if (RE.sing.test(text)) return { line: draw(LINES.sing) };
-    if (RE.dance.test(text)) return { line: draw(LINES.dance) };
-    if (RE.sad.test(text)) return { line: draw(LINES.sad) };
-    if (RE.happy.test(text)) return { line: draw(LINES.happy) };
-    if (RE.laugh.test(text)) return { line: draw(LINES.laugh) };
-    if (RE.thanks.test(text)) return { line: draw(LINES.thanks) };
-    if (RE.hello.test(text)) return { line: draw(LINES.hello) };
-    if (RE.family.test(text)) return { line: draw(LINES.family) };
-    if (RE.money.test(text)) return { line: draw(LINES.money) };
-    if (RE.music.test(text)) return { line: draw(LINES.music) };
-    if (RE.food.test(text)) return { line: draw(LINES.food) };
+
+    if (RE.andYou.test(text)) return { line: "[happy] Me? " + draw(bio.job.lines) };
+
+    if (RE.hello.test(text)) return { line: draw(LINES.hello) + maybeAsk(true) };
     if (RE.why.test(text)) return { line: draw(LINES.why) };
-    if (RE.yes.test(text)) return { line: draw(LINES.yes) };
-    if (RE.no.test(text)) return { line: draw(LINES.no) };
+    if (RE.yes.test(text)) return { line: draw(LINES.yes) + maybeAsk() };
+    if (RE.no.test(text)) return { line: draw(LINES.no) + maybeAsk() };
+
     for (const [re, pool] of ELIZA) {
       const m = text.match(re);
       if (m) return { line: draw(pool), captured: reflect(m[1]).slice(0, 60) };
     }
-    const tangent = backstoryTangent(level);
-    if (tangent && chance(0.6)) return { line: tangent };
+
+    // Nothing matched: remember something they said, tell a story, or ask them something. Never pure filler twice.
+    const remembered = level >= 0.35 ? recall(level) : null;
+    if (remembered) return { line: remembered };
+    const tangent = chance(0.5) ? backstoryTangent(level) : null;
+    if (tangent) return { line: tangent };
+    const ask = maybeAsk(true);
+    if (ask) return { line: draw(MORE.ack) + ask };
     return { line: draw(/\?\s*$/.test(text) ? QUESTION_FALLBACK : FALLBACK) };
   }
 
@@ -380,20 +638,25 @@ export function createBarTalk(persona) {
     respond(event, { stage, mood, sobering = false }) {
       let line;
       let leave = false;
+      let bye = false;
       let captured = "";
       switch (event.type) {
         case "greet":
           line = draw(LINES.greet);
           break;
         case "drink": {
+          const id = event.drink.id ?? event.drink.name;
+          const n = (memory.drinks[id] = (memory.drinks[id] ?? 0) + 1);
           const pool = event.drink.abv === 0 ? DRINK_LINES.water : DRINK_LINES[event.drink.mood] ?? DRINK_LINES.beer;
           const reaction = draw(pool);
           const tag = reaction.match(/^\[\w+\]\s*/)?.[0] ?? "";
           line = `${tag}${pick(PACE_OPENERS[event.pace])} ${reaction.slice(tag.length)}`;
-          if (event.pace === "chug" && chance(0.5)) line += " " + draw(CHUG_EXTRAS).replace(/^\[\w+\]\s*/, "");
+          if (n === 3) line += ` That's ${event.drink.name.toLowerCase()} number three. Who's counting? Me. Badly.`;
+          else if (n >= 5 && chance(0.5)) line += ` How many is that? ${n}? ${n + 2}? Numbers are fake.`;
+          else if (event.pace === "chug" && chance(0.4)) line += " " + draw(CHUG_EXTRAS).replace(/^\[\w+\]\s*/, "");
           if (event.text) {
             const said = respondToText(event.text, stage, mood);
-            if (said.leave) ({ line, leave } = said);
+            if (said.leave) ({ line, leave, bye = false } = said);
           }
           break;
         }
@@ -402,21 +665,22 @@ export function createBarTalk(persona) {
           break;
         case "wait":
           line = sobering ? draw(STAGE_LINES.sobering) : stageLine("wait", stage);
+          line += maybeAsk();
           break;
         case "beat":
           line = stageLine("beat", stage);
           break;
         case "passout":
-          line = draw(STAGE_LINES.passout);
-          return { text: line.replace(/^\[\w+\]\s*/, ""), expression: "sleepy", leave: false };
+          return { text: draw(STAGE_LINES.passout).replace(/^\[\w+\]\s*/, ""), expression: "sleepy", leave: false };
         default: {
           const said = respondToText(event.text ?? "", stage, mood);
-          ({ line, leave = false, captured = "" } = said);
+          ({ line, leave = false, bye = false, captured = "" } = said);
+          if (said.expect) memory.expecting = said.expect;
         }
       }
       if (leave) {
-        // Storming off after an insult still ends with a goodbye; a plain goodbye already is one.
-        if (!LINES.goodbye.includes(line)) line += " " + draw(LINES.goodbye).replace(/^\[\w+\]\s*/, "");
+        // Storming off still ends with a goodbye; lines that already are one stand alone.
+        if (!bye) line += " " + draw(LINES.goodbye).replace(/^\[\w+\]\s*/, "");
         return { ...finish(fill(line, captured), stage, mood), leave: true };
       }
       return { ...finish(fill(line, captured), stage, mood), leave: false };

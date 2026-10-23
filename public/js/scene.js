@@ -335,7 +335,7 @@ function buildRoom(scene) {
   scene.add(mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.9, 6), std(0x111111), { pos: [0, 2.85, -0.2], shadow: false }));
 
   // Soft frontal key so faces read clearly in the cel-shaded bands; no shadows.
-  const faceLight = new THREE.DirectionalLight(0xffe6cf, 0.6);
+  const faceLight = new THREE.DirectionalLight(0xffdcc0, 0.4);
   faceLight.position.set(0.05, 1.45, 2.6);
   faceLight.target.position.set(0, 1.0, -0.6);
   scene.add(faceLight, faceLight.target);

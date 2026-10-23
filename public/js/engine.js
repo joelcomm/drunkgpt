@@ -58,9 +58,9 @@ export const STAGES = [
   { key: "sober", below: 0.02, label: "Sober", color: "#7fd18b" },
   { key: "buzzed", below: 0.05, label: "Buzzed", color: "#c4e06a" },
   { key: "tipsy", below: 0.08, label: "Tipsy", color: "#f2c14e" },
-  { key: "drunk", below: 0.15, label: "Drunk", color: "#f08a3c" },
-  { key: "wasted", below: 0.22, label: "Wasted", color: "#e8504a" },
-  { key: "blackout", below: 0.3, label: "Barely Conscious", color: "#c03a8a" },
+  { key: "drunk", below: 0.14, label: "Drunk", color: "#f08a3c" },
+  { key: "wasted", below: 0.2, label: "Wasted", color: "#e8504a" },
+  { key: "blackout", below: 0.26, label: "Barely Conscious", color: "#c03a8a" },
   { key: "passedout", below: Infinity, label: "Passed Out", color: "#8a6cff" },
 ];
 
@@ -77,7 +77,10 @@ export const MOOD_LABELS = {
 };
 
 // Alcohol already in the stomach this far past the line means they're going down.
-const PASS_OUT_PROJECTED = 0.34;
+export const PASS_OUT_BAC = 0.26;
+const PASS_OUT_PROJECTED = 0.31;
+// Minutes someone can hover at "barely conscious" before they're out for good.
+const STUPOR_LIMIT = 15;
 
 const WIDMARK_R = { man: 0.68, woman: 0.55 };
 const ELIMINATION_PER_MIN = 0.015 / 60; // % BAC per minute
@@ -104,6 +107,7 @@ export class Night {
     this.doses = []; // { grams, start, duration, mood }
     this.lastFoodAt = -Infinity;
     this.water = 0;
+    this.stupor = 0; // minutes spent barely conscious
     this.consumed = new Map(); // drink name -> glasses (fractional)
   }
 
@@ -126,7 +130,12 @@ export class Night {
   }
 
   get passingOut() {
-    return this.bac >= 0.3 || this.projectedBac >= PASS_OUT_PROJECTED;
+    return this.outCold || this.projectedBac >= PASS_OUT_PROJECTED;
+  }
+
+  // Actually unconscious right now: over the line, or nodding in a stupor too long.
+  get outCold() {
+    return this.bac >= PASS_OUT_BAC || this.stupor >= STUPOR_LIMIT;
   }
 
   get rising() {
@@ -184,7 +193,7 @@ export class Night {
   advanceToNextStage(maxMinutes = 60) {
     const from = this.stage.key;
     let i = 0;
-    for (; i < maxMinutes && this.rising && this.stage.key === from; i++) this.advance(1);
+    for (; i < maxMinutes && this.rising && !this.outCold && this.stage.key === from; i++) this.advance(1);
     return i;
   }
 
@@ -210,6 +219,7 @@ export class Night {
       this.bac += (absorbed / (this.bodyGrams * this.r)) * 100;
       this.bac = Math.max(0, this.bac - ELIMINATION_PER_MIN);
       this.peak = Math.max(this.peak, this.bac);
+      this.stupor = this.bac >= 0.2 ? this.stupor + 1 : Math.max(0, this.stupor - 2);
       this.minutes++;
     }
   }
